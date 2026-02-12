@@ -1,0 +1,1781 @@
+<!doctype html>
+<html lang="th" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ระบบบันทึกเวลาเข้า-ออกงาน</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+function formatDateAD(d){
+  const day = String(d.getDate()).padStart(2,"0");
+  const mon = String(d.getMonth()+1).padStart(2,"0");
+  const year = d.getFullYear();
+  return `${day}/${mon}/${year}`;
+}
+</script>
+
+  <style>
+    body { font-family: Sarabun, Prompt, Arial, sans-serif; }
+    .glass { background: rgba(255,255,255,.86); backdrop-filter: blur(10px); }
+    .card { border-radius: 18px; }
+  </style>
+</head>
+<body class="min-h-full bg-gradient-to-br from-indigo-500 via-violet-600 to-fuchsia-600">
+  <main class="min-h-screen flex items-start justify-center p-6">
+    <div class="w-full max-w-5xl">
+      <!-- Header -->
+      <div class="glass card shadow-xl p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex-1">
+            <h1 class="text-2xl md:text-3xl font-extrabold text-indigo-700 text-center">
+              <span data-i18n="title">ระบบบันทึกเวลาเข้า-ออกงาน</span>
+            </h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
+              <span class="text-xs font-bold text-slate-600" data-i18n="lang">ภาษา:</span>
+              <button id="btnLangTH" class="px-3 py-1 rounded-full bg-slate-900 text-white text-sm font-bold">ไทย</button>
+              <button id="btnLangMY" class="px-3 py-1 rounded-full bg-white text-slate-900 text-sm font-bold border border-slate-200">မြန်မာ</button>
+            </div>
+            <button id="btnAdmin" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow">
+              👤 <span data-i18n="admin">Admin</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-center justify-center text-amber-800 font-semibold">
+          🔒 <span data-i18n="notice">กรุณากรอกรหัส PIN 4 หลักของคุณเพื่อบันทึกเวลา</span>
+        </div>
+      </div>
+
+      <!-- Employee buttons -->
+      <div class="mt-6 glass card shadow-xl p-6">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="empButtons"></div>
+      </div>
+
+      <!-- Today history -->
+      <div class="mt-6 glass card shadow-xl p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xl font-extrabold text-indigo-700 flex items-center gap-2">
+              🧾 <span data-i18n="today_title">ประวัติการบันทึกเวลา (วันนี้)</span>
+            </div>
+            <div class="text-sm text-slate-600" data-i18n="today_sub">แสดงเฉพาะวันนี้ (ตามเวลาท้องถิ่น)</div>
+          </div>
+          <button id="btnExport" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 font-bold shadow">
+            ⬇️ <span data-i18n="export">Export CSV (Punch)</span>
+          </button>
+        </div>
+
+        <div class="mt-4 max-h-[420px] overflow-auto pr-2" id="todayList">
+          <div class="text-slate-500 font-medium" data-i18n="loading">กำลังโหลดข้อมูล...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Punch modal -->
+  <div id="punchModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4">
+    <div class="glass card shadow-2xl w-full max-w-md p-5">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-lg font-extrabold text-slate-900">
+            <span data-i18n="punch_for">บันทึกเวลา:</span> <span id="modalEmpName" class="text-indigo-700"></span>
+          </div>
+          <div class="text-sm text-slate-600" data-i18n="time_locked">เวลาอัตโนมัติ (แก้ไขไม่ได้)</div>
+        </div>
+        <button id="btnClosePunch" class="px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold">✕</button>
+      </div>
+
+      <div class="mt-4">
+        <div class="text-xs font-bold text-slate-600 mb-1" data-i18n="pin_label">PIN (4 หลัก)</div>
+        <input id="pinInput" inputmode="numeric" maxlength="4"
+               class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-lg font-bold tracking-widest"
+               placeholder="••••" />
+        <div id="pinErr" class="mt-2 text-sm text-red-600 hidden" data-i18n="pin_wrong">PIN ไม่ถูกต้อง</div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-2">
+        <button id="btnCheckIn" class="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow">
+          ✅ <span data-i18n="check_in">เข้างาน</span>
+        </button>
+        <button id="btnCheckOut" class="px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-950 text-white font-extrabold shadow">
+          ⏹️ <span data-i18n="check_out">ออกงาน</span>
+        </button>
+      </div>
+
+      <div class="mt-4 text-xs text-slate-500 leading-relaxed">
+        • <span data-i18n="anti_cheat">ระบบบันทึกเวลาจากเครื่องตอนกดปุ่ม (พนักงานแก้เวลาไม่ได้)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin modal (Thai only) -->
+  <div id="adminModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4">
+    <div class="glass card shadow-2xl w-full max-w-md p-5">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-lg font-extrabold text-slate-900">เข้าสู่ระบบแอดมิน</div>
+          <div class="text-sm text-slate-600">ใส่รหัส Admin เพื่อดูข้อมูลหลังบ้าน</div>
+        </div>
+        <button id="btnCloseAdmin" class="px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold">✕</button>
+      </div>
+      <div class="mt-4">
+        <div class="text-xs font-bold text-slate-600 mb-1">รหัส Admin</div>
+        <input id="adminPin" inputmode="numeric"
+               class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-lg font-bold tracking-widest"
+               placeholder="กรอกรหัสแอดมิน" />
+        <div id="adminErr" class="mt-2 text-sm text-red-600 hidden">รหัสไม่ถูกต้อง</div>
+      </div>
+      <div class="mt-4">
+        <button id="btnAdminLogin" class="w-full px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold shadow">
+          เข้าใช้งาน
+        </button>
+      </div>
+      <div class="mt-4 text-xs text-slate-500">
+        หมายเหตุ: เวอร์ชันนี้เน้น “หน้าตอกบัตร” ก่อน (หลังบ้านสามารถขยายต่อได้)
+      </div>
+    </div>
+  </div>
+
+<script>
+// Google Apps Script Web App URL (ลงท้ายด้วย /exec)
+const GOOGLE_SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxi239q5aiPXXwKrzULT-6_qTsHCMyW-vC_jqArg4b0TIVWQnnn4CTWuMXcJF72WV6eJA/exec";
+
+// ===== GAS URL Override (กันปัญหา "โค้ดหมดอายุ") =====
+const GAS_URL_LS_KEY = "HR_GAS_URL_OVERRIDE_V1";
+function getGasUrl(){
+  const qp = new URLSearchParams(location.search);
+  const fromQp = qp.get("gas");
+  if(fromQp && fromQp.startsWith("https://script.google.com/")) {
+    localStorage.setItem(GAS_URL_LS_KEY, fromQp);
+  }
+  const saved = localStorage.getItem(GAS_URL_LS_KEY);
+  return (saved && saved.startsWith("https://script.google.com/")) ? saved : GOOGLE_SHEET_WEBAPP_URL;
+}
+function setGasUrl(newUrl){
+  if(!newUrl || !newUrl.startsWith("https://script.google.com/")) return false;
+  localStorage.setItem(GAS_URL_LS_KEY, newUrl);
+  return true;
+}
+function gasUrl(){
+  return getGasUrl();
+}
+
+
+
+/* =========================
+   i18n (Front page only)
+   ========================= */
+let LANG = "TH";
+const I18N = {
+  TH: {
+    title: "ระบบบันทึกเวลาเข้า-ออกงาน",
+    lang: "ภาษา:",
+    admin: "Admin",
+    notice: "กรุณากรอกรหัส PIN 4 หลักของคุณเพื่อบันทึกเวลา",
+    today_title: "ประวัติการบันทึกเวลา (วันนี้)",
+    today_sub: "แสดงเฉพาะวันนี้ (ตามเวลาท้องถิ่น)",
+    export: "Export CSV (Punch)",
+    loading: "กำลังโหลดข้อมูล...",
+    punch_for: "บันทึกเวลา:",
+    time_locked: "เวลาอัตโนมัติ (แก้ไขไม่ได้)",
+    pin_label: "PIN (4 หลัก)",
+    pin_wrong: "PIN ไม่ถูกต้อง",
+    check_in: "เข้างาน",
+    check_out: "ออกงาน",
+    anti_cheat: "ระบบบันทึกเวลาจากเครื่องตอนกดปุ่ม (พนักงานแก้เวลาไม่ได้)",
+    status_working: "กำลังทำงาน",
+    status_done: "ออกงานแล้ว",
+    type_in: "เข้างาน",
+    type_out: "ออกงาน",
+    no_records: "ยังไม่มีรายการวันนี้"
+  },
+  MY: {
+    title: "အလုပ်ဝင်/အလုပ်ပြီး အချိန်မှတ်တမ်း",
+    lang: "ဘာသာ:",
+    admin: "Admin",
+    notice: "အချိန်မှတ်တမ်းအတွက် PIN ၄ လုံးကို ထည့်ပါ",
+    today_title: "ယနေ့ အချိန်မှတ်တမ်း",
+    today_sub: "ယနေ့သာ ပြသသည် (ဒေသခံအချိန်)",
+    export: "CSV ထုတ်ယူ (Punch)",
+    loading: "ဒေတာ လုပ်ဆောင်နေသည်...",
+    punch_for: "အချိန်မှတ်တမ်း:",
+    time_locked: "အချိန်ကို အလိုအလျောက်ယူသည် (ပြင်မရ)",
+    pin_label: "PIN (၄ လုံး)",
+    pin_wrong: "PIN မမှန်ပါ",
+    check_in: "အလုပ်ဝင်",
+    check_out: "အလုပ်ပြီး",
+    anti_cheat: "ခလုတ်နှိပ်ချိန်က စက်အချိန်ကို မှတ်တမ်းတင်သည် (ပြင်မရ)",
+    status_working: "အလုပ်လုပ်နေသည်",
+    status_done: "အလုပ်ပြီးပြီ",
+    type_in: "အလုပ်ဝင်",
+    type_out: "အလုပ်ပြီး",
+    no_records: "ယနေ့ မှတ်တမ်း မရှိသေးပါ"
+  }
+};
+function t(k){ return (I18N[LANG] && I18N[LANG][k]) ? I18N[LANG][k] : (I18N.TH[k] || k); }
+function applyLang(lang){
+  LANG = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const key = el.getAttribute("data-i18n");
+    el.textContent = t(key);
+  });
+  document.getElementById("btnLangTH").className = (LANG==="TH")
+    ? "px-3 py-1 rounded-full bg-slate-900 text-white text-sm font-bold"
+    : "px-3 py-1 rounded-full bg-white text-slate-900 text-sm font-bold border border-slate-200";
+  document.getElementById("btnLangMY").className = (LANG==="MY")
+    ? "px-3 py-1 rounded-full bg-slate-900 text-white text-sm font-bold"
+    : "px-3 py-1 rounded-full bg-white text-slate-900 text-sm font-bold border border-slate-200";
+  renderToday();
+}
+
+/* =========================
+   Storage
+   ========================= */
+
+// ===== Server-synced state (APP_STATE in Google Sheet) =====
+// หมายเหตุ: จะเก็บ state กลางไว้ที่ชีท APP_STATE เพื่อให้ทุกเครื่องเห็นเหมือนกัน 100%
+// localStorage จะใช้แค่จำ GAS URL (กัน deploy เปลี่ยนแล้วลิงก์เก่าหมดอายุ)
+const DEFAULT_SEED_STATE = (function(){
+  return {
+    adminPin: "276799",
+    settings: { holidayDays: "4,18" },
+    advances: [],
+    shiftCalendar: {},
+    dishwashCalendar: {},
+    employees: [
+      {id:"emp_guk", name:"กุ๊ก", pin:"5555"},
+      {id:"emp_b",   name:"บี",   pin:"4444"},
+      {id:"emp_joy", name:"จอย",  pin:"2222"},
+      {id:"emp_phu", name:"ภู",   pin:"1111"},
+      {id:"emp_tar", name:"ต้าร์", pin:"2456", wage:300, role:""},
+    ],
+    punches: []
+  };
+})();
+
+let state = JSON.parse(JSON.stringify(DEFAULT_SEED_STATE));
+
+function normalizeState(s){
+  const base = JSON.parse(JSON.stringify(DEFAULT_SEED_STATE));
+  const obj = (s && typeof s === "object") ? s : {};
+  // shallow merge
+  const merged = Object.assign(base, obj);
+
+  // deep-ish merge for nested objects
+  merged.settings = Object.assign({}, base.settings, obj.settings || {});
+  merged.shiftCalendar = Object.assign({}, base.shiftCalendar, obj.shiftCalendar || {});
+  merged.dishwashCalendar = Object.assign({}, base.dishwashCalendar, obj.dishwashCalendar || {});
+
+  // arrays
+  merged.employees = (Array.isArray(obj.employees) && obj.employees.length) ? obj.employees : base.employees;
+  merged.advances  = Array.isArray(obj.advances) ? obj.advances : base.advances;
+  merged.punches   = Array.isArray(obj.punches) ? obj.punches : base.punches;
+
+  // ensure adminPin exists
+  if(!merged.adminPin) merged.adminPin = base.adminPin;
+
+  return merged;
+}
+
+let __saveTimer = null;
+let __stateLoadedOnce = false;
+
+async function loadStateFromServer(){
+  try{
+    const res = await gasJsonp({ action:"getState" });
+    if(res && res.ok){
+      const raw = res.state || {};
+      state = normalizeState(raw);
+      __stateLoadedOnce = true;
+
+      // ถ้า state ในชีทยังว่าง ({}), ให้ seed ค่า default กลับเข้าไปครั้งหนึ่ง
+      if(!raw || (typeof raw === "object" && Object.keys(raw).length === 0)){
+        scheduleSaveStateToServer();
+      }
+      return true;
+    }
+    return false;
+  }catch(e){
+    return false;
+  }
+}
+
+
+function scheduleSaveStateToServer(){
+  if(__saveTimer) clearTimeout(__saveTimer);
+  __saveTimer = setTimeout(async ()=>{
+    try{
+      await gasJsonp({ action:"saveState", state_json: JSON.stringify(state) });
+    }catch(e){
+      // ignore
+    }
+  }, 400);
+}
+
+// compatibility: โค้ดเดิมเรียก save()
+function save(){ scheduleSaveStateToServer(); }
+
+
+const LS = "HR_PUNCH_ONLY_V1";
+function uid(){ return "p_" + Math.random().toString(16).slice(2) + Date.now().toString(16); }
+
+let __punchBeacon = null;
+
+
+
+// ===== JSONP helper (ข้ามโดเมนไม่ติด CORS) =====
+function gasJsonp(params){
+  return new Promise((resolve, reject)=>{
+    const cb = "cb_" + Math.random().toString(16).slice(2);
+    const qs = new URLSearchParams({ ...(params||{}), callback: cb });
+    const url = gasUrl() + "?" + qs.toString();
+
+    const s = document.createElement("script");
+    let done = false;
+    const timer = setTimeout(()=>cleanup(new Error("JSONP_TIMEOUT")), 12000);
+
+    function cleanup(err){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[cb]; } catch(e) {}
+      s.remove();
+      if(err) reject(err);
+    }
+
+    window[cb] = (data)=>{
+      cleanup();
+      resolve(data);
+    };
+    s.onerror = ()=>cleanup(new Error("JSONP_LOAD_ERROR"));
+    s.src = url;
+    document.body.appendChild(s);
+  });
+}
+
+
+function sendPunchToGoogleSheet(payload){
+  return gasJsonp({
+    action: "punch",
+    employee_name: payload.employee_name,
+    type: payload.type,
+    ts: String(payload.ts)
+  });
+}
+
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+function ymd(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function load(){
+  try{
+    const raw = localStorage.getItem(LS);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  // seed
+  return {
+    adminPin: "276799",
+    settings: { holidayDays: "4,18" },
+    advances: [],
+    shiftCalendar: {},
+    dishwashCalendar: {},
+    employees: [
+      {id:"emp_guk", name:"กุ๊ก", pin:"5555"},
+      {id:"emp_b",   name:"บี",   pin:"4444"},
+      {id:"emp_joy", name:"จอย",  pin:"2222"},
+      {id:"emp_phu", name:"ภู",   pin:"1111"},
+      {id:"emp_tar", name:"ต้าร์", pin:"2456", wage:300, role:""},
+    ],
+    punches: []
+  };
+}
+function save(){ localStorage.setItem(LS, JSON.stringify(state)); }
+let state = load();
+
+/* =========================
+   UI helpers
+   ========================= */
+let selectedEmpId = null;
+
+function openPunch(empId){
+  selectedEmpId = empId;
+  document.getElementById("pinInput").value = "";
+  document.getElementById("pinErr").classList.add("hidden");
+  document.getElementById("modalEmpName").textContent = getEmp(empId)?.name || "";
+  const m = document.getElementById("punchModal");
+  m.classList.remove("hidden");
+  m.classList.add("flex");
+  setTimeout(()=>document.getElementById("pinInput").focus(), 0);
+}
+function closePunch(){
+  const m = document.getElementById("punchModal");
+  m.classList.add("hidden");
+  m.classList.remove("flex");
+  selectedEmpId = null;
+}
+function openAdmin(){
+  document.getElementById("adminPin").value = "";
+  document.getElementById("adminErr").classList.add("hidden");
+  const m = document.getElementById("adminModal");
+  m.classList.remove("hidden");
+  m.classList.add("flex");
+  setTimeout(()=>document.getElementById("adminPin").focus(), 0);
+}
+function closeAdmin(){
+  const m = document.getElementById("adminModal");
+  m.classList.add("hidden");
+  m.classList.remove("flex");
+}
+function getEmp(id){ return state.employees.find(e=>e.id===id); }
+
+function renderEmployees(){
+  const wrap = document.getElementById("empButtons");
+  wrap.innerHTML = "";
+  state.employees.forEach(e=>{
+    const btn = document.createElement("button");
+    btn.className = "h-14 rounded-2xl bg-white hover:bg-slate-50 shadow font-extrabold text-xl text-slate-900";
+    btn.textContent = e.name;
+    btn.addEventListener("click", ()=>openPunch(e.id));
+    wrap.appendChild(btn);
+  });
+}
+
+function lastStatusByEmpToday(){
+  const today = ymd(new Date());
+  const rows = state.punches
+    .filter(p=>p.date===today)
+    .sort((a,b)=>a.ts - b.ts);
+  const map = new Map(); // empId -> lastType
+  rows.forEach(p=>map.set(p.empId, p.type));
+  return map;
+}
+
+
+let __lastTodayHash = "";
+async function refreshTodayFromServer(){
+  try{
+    const res = await gasJsonp({ action:"getTodayPunch" });
+    if(!res || !res.ok) return false;
+
+    const hash = JSON.stringify(res.rows || []);
+    if(hash === __lastTodayHash) return true;
+    __lastTodayHash = hash;
+
+    renderTodayFromRows(res.rows || []);
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+function renderTodayFromRows(rows){
+  const list = document.getElementById("todayList");
+  if(!rows.length){
+    list.innerHTML = `<div class="text-slate-500 font-medium">${t("no_records")}</div>`;
+    return;
+  }
+
+  const byEmp = new Map();
+  rows.forEach(r=>{
+    const name = String(r.employee_name||"").trim();
+    if(!name) return;
+    if(!byEmp.has(name)) byEmp.set(name, []);
+    byEmp.get(name).push(r);
+  });
+
+  const blocks = Array.from(byEmp.entries()).map(([name, items])=>{
+    const latest = items[items.length-1];
+    const isWorking = !String(latest.check_out_time||"").trim();
+    return { name, latest, isWorking };
+  }).sort((a,b)=>a.name.localeCompare(b.name,"th"));
+
+  list.innerHTML = "";
+  blocks.forEach(b=>{
+    const badge = b.isWorking
+      ? `<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-800 font-bold text-sm">🟡 ${t("status_working")}</span>`
+      : `<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm">🟢 ${t("status_done")}</span>`;
+
+    const card = document.createElement("div");
+    card.className = "rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-3";
+    const time = b.isWorking ? (b.latest.check_in_time||"") : (b.latest.check_out_time||"");
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-lg font-extrabold text-slate-900">${b.name}</div>
+          <div class="mt-2">${badge}</div>
+          <div class="mt-2 text-sm text-slate-700">${b.latest.work_date || ""}</div>
+          <div class="text-sm text-slate-700">${b.isWorking ? t("type_in") : t("type_out")} • ${time}</div>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+
+function renderToday(){
+  refreshTodayFromServer().then(ok=>{
+    if(ok) return;
+    const list = document.getElementById("todayList");
+    list.innerHTML = `<div class="text-slate-500 font-medium">⚠️ ยังเชื่อมต่อชีทไม่ได้ (ตรวจ URL /exec)</div>`;
+  });
+}
+
+function doPunch(type){
+  const emp = getEmp(selectedEmpId);
+  if(!emp) return;
+  const pin = document.getElementById("pinInput").value.trim();
+  if(pin !== String(emp.pin)){
+    document.getElementById("pinErr").classList.remove("hidden");
+    return;
+  }
+  document.getElementById("pinErr").classList.add("hidden");
+
+  const now = Date.now();
+  sendPunchToGoogleSheet({ employee_name: emp.name, type: type, ts: now })
+    .then(()=>{ closePunch(); renderToday(); })
+    .catch(()=>{ alert("เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง (ตรวจ URL /exec)"); });
+}
+
+function exportCSV(){
+  const header = ["timestamp","date","time","employee","type"];
+  const lines = [header.join(",")];
+  state.punches
+    .slice()
+    .sort((a,b)=>a.ts-b.ts)
+    .forEach(p=>{
+      const emp = getEmp(p.empId);
+      const d = new Date(p.ts);
+      const date = p.date;
+      const time = d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+      const row = [String(p.ts), date, time, emp?emp.name:"", (p.type==="in"?t("type_in"):t("type_out"))];
+      const esc = (v)=>/[,"\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+      lines.push(row.map(esc).join(","));
+    });
+  const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "punches.csv";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+/* =========================
+   Wire up
+   ========================= */
+document.addEventListener("DOMContentLoaded", async ()=>{
+  // language
+  document.getElementById("btnLangTH").addEventListener("click", ()=>applyLang("TH"));
+  document.getElementById("btnLangMY").addEventListener("click", ()=>applyLang("MY"));
+
+  // modals
+  document.getElementById("btnClosePunch").addEventListener("click", closePunch);
+  document.getElementById("punchModal").addEventListener("click", (e)=>{ if(e.target.id==="punchModal") closePunch(); });
+
+  document.getElementById("btnAdmin").addEventListener("click", openAdmin);
+  document.getElementById("btnCloseAdmin").addEventListener("click", closeAdmin);
+  document.getElementById("adminModal").addEventListener("click", (e)=>{ if(e.target.id==="adminModal") closeAdmin(); });
+
+  // punch buttons
+  document.getElementById("btnCheckIn").addEventListener("click", ()=>doPunch("in"));
+  document.getElementById("btnCheckOut").addEventListener("click", ()=>doPunch("out"));
+
+  // export
+  document.getElementById("btnExport").addEventListener("click", exportCSV);
+
+  // admin login (thai only)
+  document.getElementById("btnAdminLogin").addEventListener("click", ()=>{
+    const pin = document.getElementById("adminPin").value.trim();
+    if(pin === String(state.adminPin||"")){
+      closeAdmin();
+      openAdminPanel();
+    }else{
+      document.getElementById("adminErr").classList.remove("hidden");
+    }
+  });
+
+
+
+/* =========================
+   Admin panel (Thai only)
+   ========================= */
+let adminAuthed = false;
+
+function openAdminPanel(){
+  adminAuthed = true;
+  const p = document.getElementById("adminPanel");
+  p.classList.remove("hidden");
+  // default tab
+  selectAdminTab("dash");
+  // seed month inputs
+  const now = new Date();
+  const ym = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  ["dashMonth","payMonth","shiftMonth","dwMonth"].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && !el.value) el.value = ym;
+  });
+  // settings UI
+  if(document.getElementById("gasUrlInput")) document.getElementById("gasUrlInput").value = gasUrl();
+  document.getElementById("holidayDays").value = (state.settings && state.settings.holidayDays) ? state.settings.holidayDays : "4,18";
+  document.getElementById("adminPinSet").value = String(state.adminPin||"");
+  // render
+  refreshAdminAll();
+}
+
+function closeAdminPanel(){
+  adminAuthed = false;
+  const p = document.getElementById("adminPanel");
+  p.classList.add("hidden");
+}
+
+function selectAdminTab(key){
+  document.querySelectorAll(".adminTab").forEach(b=>{
+    const active = b.getAttribute("data-tab")===key;
+    b.classList.toggle("bg-indigo-600", active);
+    b.classList.toggle("text-white", active);
+    b.classList.toggle("hover:bg-slate-50", !active);
+  });
+  document.querySelectorAll(".adminPage").forEach(sec=>sec.classList.add("hidden"));
+  const target = document.getElementById("tab_"+key);
+  if(target) target.classList.remove("hidden");
+  // render tab content
+  if(key==="dash") renderDashboard();
+  if(key==="payroll") renderPayroll();
+  if(key==="staff") renderEmpAdmin();
+  if(key==="settings") renderSettingsAdmin();
+  if(key==="shifts") renderShiftCalendar();
+  if(key==="dishwash") renderDishwashCalendar();
+}
+
+function monthRange(ym){
+  const [y,m] = ym.split("-").map(Number);
+  const start = new Date(y, m-1, 1);
+  const end = new Date(y, m, 1); // exclusive
+  return {start, end, y, m};
+}
+
+function listDatesInMonth(ym){
+  const {start, end} = monthRange(ym);
+  const dates = [];
+  for(let d = new Date(start); d < end; d.setDate(d.getDate()+1)){
+    dates.push(new Date(d));
+  }
+  return dates;
+}
+
+function getEmpSafe(id){
+  const e = getEmp(id);
+  if(!e) return null;
+  if(typeof e.wage!=="number") e.wage = Number(e.wage||300);
+  if(typeof e.role!=="string") e.role = String(e.role||"");
+  return e;
+}
+
+function punchesInMonth(ym){
+  const {start, end} = monthRange(ym);
+  return state.punches.filter(p=>p.ts>=start.getTime() && p.ts<end.getTime());
+}
+
+function workedDaysByEmp(ym){
+  const rows = punchesInMonth(ym).filter(p=>p.type==="in");
+  const map = new Map(); // empId -> Set(date)
+  rows.forEach(p=>{
+    if(!map.has(p.empId)) map.set(p.empId, new Set());
+    map.get(p.empId).add(p.date);
+  });
+  const out = new Map();
+  map.forEach((set, empId)=>out.set(empId, set.size));
+  return out;
+}
+
+function advancesByEmpInMonth(ym){
+  const {start, end} = monthRange(ym);
+  const map = new Map();
+  (state.advances||[]).forEach(a=>{
+    const ts = a.ts || Date.parse(a.date);
+    if(!ts) return;
+    if(ts>=start.getTime() && ts<end.getTime()){
+      map.set(a.empId, (map.get(a.empId)||0) + Number(a.amount||0));
+    }
+  });
+  return map;
+}
+
+function fmtBaht(n){
+  const v = Number(n||0);
+  return v.toLocaleString("th-TH", {maximumFractionDigits:0});
+}
+
+function calcPayrollRows(ym){
+  const daysMap = workedDaysByEmp(ym);
+  const advMap = advancesByEmpInMonth(ym);
+  return state.employees.map(e=>{
+    const emp = getEmpSafe(e.id);
+    const days = daysMap.get(emp.id)||0;
+    const wage = Number(emp.wage||300);
+    const gross = days*wage;
+    const adv = advMap.get(emp.id)||0;
+    const net = gross-adv;
+    return {id:emp.id, name:emp.name, wage, days, gross, adv, net, role:emp.role||""};
+  }).sort((a,b)=>a.name.localeCompare(b.name,"th"));
+}
+
+function workingDaysCountExcludingHolidays(ym){
+  const dates = listDatesInMonth(ym);
+  const hol = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  let count=0;
+  dates.forEach(d=>{
+    const day = d.getDate();
+    if(hol.includes(day)) return;
+    count++;
+  });
+  return count;
+}
+
+function renderDashboard(){
+  const ym = document.getElementById("dashMonth").value;
+  const rows = calcPayrollRows(ym);
+  const workDays = workingDaysCountExcludingHolidays(ym);
+  const manDays = rows.reduce((s,r)=>s+r.days,0);
+  const gross = rows.reduce((s,r)=>s+r.gross,0);
+  const adv = rows.reduce((s,r)=>s+r.adv,0);
+  const net = gross-adv;
+  document.getElementById("dashWorkDays").textContent = fmtBaht(workDays);
+  document.getElementById("dashManDays").textContent = fmtBaht(manDays);
+  document.getElementById("dashGross").textContent = fmtBaht(gross);
+  document.getElementById("dashNet").textContent = fmtBaht(net);
+
+  const tb = document.getElementById("dashTable");
+  tb.innerHTML = "";
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="py-2 font-bold">${r.name}</td>
+      <td>${fmtBaht(r.wage)}</td>
+      <td>${fmtBaht(r.days)}</td>
+      <td>${fmtBaht(r.gross)}</td>
+      <td>${fmtBaht(r.adv)}</td>
+      <td class="font-extrabold">${fmtBaht(r.net)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+function renderPayroll(){
+  const ym = document.getElementById("payMonth").value;
+  const rows = calcPayrollRows(ym);
+  const tb = document.getElementById("payTable");
+  tb.innerHTML="";
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `
+      <td class="py-2 font-bold">${r.name}</td>
+      <td>${fmtBaht(r.days)}</td>
+      <td>${fmtBaht(r.wage)}</td>
+      <td>${fmtBaht(r.gross)}</td>
+      <td>${fmtBaht(r.adv)}</td>
+      <td class="font-extrabold">${fmtBaht(r.net)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  renderAdvancesTable();
+}
+
+function renderAdvancesTable(){
+  const tb = document.getElementById("advTable");
+  tb.innerHTML="";
+  const rows = (state.advances||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  rows.forEach(a=>{
+    const emp = getEmpSafe(a.empId);
+    const d = new Date(a.ts||Date.parse(a.date));
+    const date = d && !isNaN(d) ? d.toLocaleDateString("en-GB") : (a.date||"");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="py-2">${date}</td>
+      <td class="font-bold">${emp?emp.name:""}</td>
+      <td>${fmtBaht(a.amount)}</td>
+      <td>${a.note?String(a.note):""}</td>
+      <td><button class="px-3 py-1 rounded-lg bg-white border border-slate-200 font-bold" data-del-adv="${a.id}">ลบ</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll("[data-del-adv]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-del-adv");
+      state.advances = (state.advances||[]).filter(x=>x.id!==id);
+      save();
+      renderPayroll();
+      renderDashboard();
+    });
+  });
+}
+
+function exportPayrollCSV(){
+  const ym = document.getElementById("payMonth").value;
+  const rows = calcPayrollRows(ym);
+  const header = ["month","employee","days","wage_per_day","gross","advance","net"];
+  const lines=[header.join(",")];
+  const esc = (v)=>/[,"\n]/.test(String(v)) ? `"${String(v).replace(/"/g,'""')}"` : String(v);
+  rows.forEach(r=>{
+    const row=[ym,r.name,r.days,r.wage,r.gross,r.adv,r.net].map(esc);
+    lines.push(row.join(","));
+  });
+  const blob=new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`payroll_${ym}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0);
+}
+
+function addAdvance(){
+  const empName = prompt("ชื่อพนักงาน (พิมพ์ให้ตรง เช่น จอย):");
+  if(!empName) return;
+  const emp = state.employees.find(e=>e.name===empName.trim());
+  if(!emp) return alert("ไม่พบชื่อพนักงาน");
+  const amt = Number(prompt("จำนวนเงินเบิก (บาท):","0"));
+  if(!isFinite(amt) || amt<=0) return alert("จำนวนเงินไม่ถูกต้อง");
+  const note = prompt("หมายเหตุ (ไม่บังคับ):","")||"";
+  const now = Date.now();
+  state.advances = state.advances || [];
+  state.advances.push({id: uid(), empId: emp.id, amount: amt, note, ts: now, date: ymd(new Date(now))});
+  save();
+  renderPayroll();
+  renderDashboard();
+}
+
+function renderEmpAdmin(){
+  const tb = document.getElementById("empTable");
+  tb.innerHTML="";
+  state.employees.forEach(e=>{
+    const emp=getEmpSafe(e.id);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td class="py-2 font-bold">${emp.name}</td>
+      <td><input class="px-2 py-1 rounded-lg border border-slate-200 font-bold w-24" value="${emp.pin}" data-emp-pin="${emp.id}"></td>
+      <td><input class="px-2 py-1 rounded-lg border border-slate-200 font-bold w-24" value="${emp.wage||300}" data-emp-wage="${emp.id}"></td>
+      <td><input class="px-2 py-1 rounded-lg border border-slate-200 font-bold w-56" value="${emp.role||""}" data-emp-role="${emp.id}"></td>
+      <td><button class="px-3 py-1 rounded-lg bg-white border border-slate-200 font-bold" data-del-emp="${emp.id}">ลบ</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  tb.querySelectorAll("[data-emp-pin]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const id=inp.getAttribute("data-emp-pin");
+      const emp=getEmpSafe(id);
+      emp.pin=String(inp.value).trim().padStart(4,"0").slice(-4);
+      save();
+      renderEmployees(); // front buttons (names)
+    });
+  });
+  tb.querySelectorAll("[data-emp-wage]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const id=inp.getAttribute("data-emp-wage");
+      const emp=getEmpSafe(id);
+      emp.wage=Number(inp.value)||300;
+      save();
+      renderDashboard(); renderPayroll();
+    });
+  });
+  tb.querySelectorAll("[data-emp-role]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const id=inp.getAttribute("data-emp-role");
+      const emp=getEmpSafe(id);
+      emp.role=String(inp.value||"");
+      save();
+    });
+  });
+  tb.querySelectorAll("[data-del-emp]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id=btn.getAttribute("data-del-emp");
+      if(!confirm("ลบพนักงานคนนี้?")) return;
+      state.employees = state.employees.filter(e=>e.id!==id);
+      // also clean related data
+      state.punches = state.punches.filter(p=>p.empId!==id);
+      state.advances = (state.advances||[]).filter(a=>a.empId!==id);
+      save();
+      renderEmployees(); renderToday();
+      renderEmpAdmin(); renderDashboard(); renderPayroll();
+    });
+  });
+}
+
+function addEmployeeAdmin(){
+  const name = prompt("ชื่อพนักงาน:");
+  if(!name) return;
+  const pin = (prompt("PIN 4 หลัก:","0000")||"0000").trim().padStart(4,"0").slice(-4);
+  const wage = Number(prompt("ค่าแรงต่อวัน (บาท):","300"))||300;
+  const role = prompt("หน้าที่ (ไม่บังคับ):","")||"";
+  const id = "emp_"+Math.random().toString(16).slice(2,8);
+  state.employees.push({id, name:name.trim(), pin, wage, role});
+  save();
+  renderEmployees();
+  renderEmpAdmin();
+  renderDashboard();
+  renderPayroll();
+}
+
+function renderSettingsAdmin(){
+  document.getElementById("holidayDays").value = (state.settings&&state.settings.holidayDays) ? state.settings.holidayDays : "4,18";
+  document.getElementById("adminPinSet").value = String(state.adminPin||"");
+}
+
+function saveSettingsAdmin(){
+  state.settings = state.settings || {};
+  state.settings.holidayDays = String(document.getElementById("holidayDays").value||"").trim();
+  state.adminPin = String(document.getElementById("adminPinSet").value||"").trim();
+  save();
+  alert("บันทึกการตั้งค่าแล้ว");
+  renderDashboard();
+  renderShiftCalendar();
+  renderDishwashCalendar();
+}
+
+function calendarTableHTML(ym, cellRenderer){
+  const dates = listDatesInMonth(ym);
+  const {y,m} = monthRange(ym);
+  const firstDow = new Date(y,m-1,1).getDay(); // 0=Sun
+  const hol = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  const weeks = [];
+  let week = new Array(7).fill(null);
+  // pad start
+  for(let i=0;i<firstDow;i++) week[i]=null;
+  dates.forEach(d=>{
+    const dow = d.getDay();
+    week[dow]=new Date(d);
+    if(dow===6){
+      weeks.push(week);
+      week=new Array(7).fill(null);
+    }
+  });
+  if(week.some(x=>x!==null)) weeks.push(week);
+
+  const dowNames=["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+  let html = `<table class="min-w-[1100px] w-full text-sm border border-slate-200 rounded-2xl overflow-hidden bg-white">
+    <thead><tr class="bg-slate-100 text-slate-700">
+      ${dowNames.map(n=>`<th class="p-2 border-r border-slate-200">${n}</th>`).join("")}
+    </tr></thead><tbody>`;
+  weeks.forEach(w=>{
+    html += "<tr>";
+    w.forEach(d=>{
+      if(!d){
+        html += `<td class="align-top p-2 border-r border-t border-slate-200 h-36 bg-slate-50"></td>`;
+      }else{
+        const day=d.getDate();
+        const isHol = hol.includes(day);
+        html += `<td class="align-top p-2 border-r border-t border-slate-200 h-36 ${isHol?"bg-amber-50":""}">
+          <div class="flex items-center justify-between">
+            <div class="font-extrabold text-slate-900">${day}</div>
+            ${isHol?`<span class="text-xs font-extrabold text-amber-700">หยุด</span>`:""}
+          </div>
+          ${cellRenderer(ym, d)}
+        </td>`;
+      }
+    });
+    html += "</tr>";
+  });
+  html += "</tbody></table>";
+  return html;
+}
+
+function keyForDate(d){ return ymd(d); }
+
+function renderShiftCalendar(){
+  const ym = document.getElementById("shiftMonth").value;
+  const wrap = document.getElementById("shiftCalendarWrap");
+  state.shiftCalendar = state.shiftCalendar || {};
+  const html = calendarTableHTML(ym, (ym, d)=>{
+    const k = keyForDate(d);
+    const val = state.shiftCalendar[k] || {morning:"", evening:""};
+    const placeholder = "เช้า | เย็น";
+    return `
+      <div class="mt-2">
+        <textarea class="w-full h-20 text-xs rounded-xl border border-slate-200 p-2 font-bold"
+          data-shift="${k}" placeholder="${placeholder}">${(val.morning||"")}${val.evening?("\n---\n"+val.evening):""}</textarea>
+        <div class="text-[11px] text-slate-500 mt-1">บรรทัดบน=กะเช้า, ใต้เส้น=กะเย็น</div>
+      </div>
+    `;
+  });
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll("[data-shift]").forEach(txa=>{
+    txa.addEventListener("change", ()=>{
+      const k = txa.getAttribute("data-shift");
+      const raw = String(txa.value||"");
+      const parts = raw.split("\n---\n");
+      const morning = (parts[0]||"").trim();
+      const evening = (parts[1]||"").trim();
+      state.shiftCalendar[k] = {morning, evening};
+      save();
+      renderShiftSummary(document.getElementById("shiftMonth").value);
+    });
+  });
+  renderShiftSummary(ym);
+}
+
+function renderDishwashCalendar(){
+  const ym = document.getElementById("dwMonth").value;
+  const wrap = document.getElementById("dwCalendarWrap");
+  state.dishwashCalendar = state.dishwashCalendar || {};
+  const html = calendarTableHTML(ym, (ym, d)=>{
+    const k = keyForDate(d);
+    const val = state.dishwashCalendar[k] || {main:"", reserve:""};
+    return `
+      <div class="mt-2 text-xs">
+        <div class="font-bold text-slate-700">ชื่อผู้รับผิดชอบ</div>
+        <input class="w-full mt-1 px-2 py-1 rounded-xl border border-slate-200 font-bold" data-dw-main="${k}" placeholder="เช่น ต้าร์ + ภู" value="${val.main||""}">
+        <div class="font-bold text-slate-700 mt-2">ตัวสำรอง</div>
+        <input class="w-full mt-1 px-2 py-1 rounded-xl border border-slate-200 font-bold" data-dw-res="${k}" placeholder="เช่น บี" value="${val.reserve||""}">
+      </div>
+    `;
+  });
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll("[data-dw-main]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const k=inp.getAttribute("data-dw-main");
+      state.dishwashCalendar[k] = state.dishwashCalendar[k] || {main:"", reserve:""};
+      state.dishwashCalendar[k].main = String(inp.value||"").trim();
+      save();
+      renderDishwashSummary(document.getElementById("dwMonth").value);
+    });
+  });
+  wrap.querySelectorAll("[data-dw-res]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const k=inp.getAttribute("data-dw-res");
+      state.dishwashCalendar[k] = state.dishwashCalendar[k] || {main:"", reserve:""};
+      state.dishwashCalendar[k].reserve = String(inp.value||"").trim();
+      save();
+      renderDishwashSummary(document.getElementById("dwMonth").value);
+    });
+  });
+  renderDishwashSummary(ym);
+}
+
+
+/* =========================
+   Shift & Dishwash helpers
+   ========================= */
+function parseNamesList(str){
+  if(!str) return [];
+  return String(str)
+    .replace(/[+]/g,",")
+    .split(/[,\n]/)
+    .map(s=>s.trim())
+    .filter(Boolean);
+}
+function empNameSetFromShiftDay(k){
+  // returns {morning:Set(names), evening:Set(names)}
+  const v = (state.shiftCalendar||{})[k] || {morning:"", evening:""};
+  return {
+    morning: new Set(parseNamesList(v.morning)),
+    evening: new Set(parseNamesList(v.evening)),
+  };
+}
+function renderShiftSummary(ym){
+  const tb = document.getElementById("shiftSummaryTable");
+  if(!tb) return;
+  const dates = listDatesInMonth(ym);
+  const hol = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  const counts = {};
+  state.employees.forEach(e=>{ counts[e.name]={morning:0, evening:0}; });
+
+  dates.forEach(d=>{
+    const day=d.getDate();
+    if(hol.includes(day)) return;
+    const k = ymd(d);
+    const v = (state.shiftCalendar||{})[k] || {morning:"", evening:""};
+    parseNamesList(v.morning).forEach(n=>{ if(counts[n]) counts[n].morning++; });
+    parseNamesList(v.evening).forEach(n=>{ if(counts[n]) counts[n].evening++; });
+  });
+
+  tb.innerHTML="";
+  Object.keys(counts).sort((a,b)=>a.localeCompare(b,"th")).forEach(name=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td class="py-2 font-bold">${name}</td><td>${counts[name].morning}</td><td>${counts[name].evening}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function renderDishwashSummary(ym){
+  const tb = document.getElementById("dwSummaryTable");
+  if(!tb) return;
+  const dates = listDatesInMonth(ym);
+  const hol = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  const counts = {};
+  state.employees.forEach(e=>{ counts[e.name]={main:0, reserve:0}; });
+
+  dates.forEach(d=>{
+    const day=d.getDate();
+    if(hol.includes(day)) return;
+    const k = ymd(d);
+    const v = (state.dishwashCalendar||{})[k] || {main:"", reserve:""};
+    // main expects "A + B" -> count each
+    parseNamesList(v.main).forEach(n=>{ if(counts[n]) counts[n].main++; });
+    parseNamesList(v.reserve).forEach(n=>{ if(counts[n]) counts[n].reserve++; });
+  });
+
+  tb.innerHTML="";
+  Object.keys(counts).sort((a,b)=>a.localeCompare(b,"th")).forEach(name=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td class="py-2 font-bold">${name}</td><td>${counts[name].main}</td><td>${counts[name].reserve}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* =========================
+   Seed Feb 2026 data
+   ========================= */
+function seedFeb2026Shifts(){
+  const ym="2026-02";
+  state.shiftCalendar = state.shiftCalendar || {};
+  const setRange = (from,to,morning,evening)=>{
+    for(let d=from; d<=to; d++){
+      const k = `2026-02-${String(d).padStart(2,"0")}`;
+      state.shiftCalendar[k] = {morning, evening};
+    }
+  };
+  // From the spreadsheet summary blocks
+  setRange(2,11, "บี, ภู", "ต้าร์, จอย, กุ๊ก");
+  setRange(12,15,"กุ๊ก, ภู","ต้าร์, จอย, บี");
+  setRange(16,20,"กุ๊ก, จอย","ต้าร์, ภู, บี");
+  setRange(22,28,"ต้าร์, จอย","กุ๊ก, ภู, บี");
+  // Holidays handled by settings (4,18)
+  save();
+  document.getElementById("shiftMonth").value = ym;
+  renderShiftCalendar();
+  alert("เติมข้อมูลกะ ก.พ. 2026 แล้ว");
+}
+
+function seedFeb2026Dishwash(){
+  const ym="2026-02";
+  state.dishwashCalendar = state.dishwashCalendar || {};
+  const put = (day, main, reserve)=>{
+    const k = `2026-02-${String(day).padStart(2,"0")}`;
+    state.dishwashCalendar[k] = {main, reserve};
+  };
+  // Transcribed from the provided sheet (ก.พ. 2026) — ifมีจุดไหนต่างจากของจริง คุณแก้ในช่องได้
+  put(1, "ต้าร์ + ภู", "บี");
+  put(2, "จอย + บี", "ภู");
+  put(3, "กุ๊ก + ภู", "จอย");
+  // 4 holiday
+  put(5, "จอย + ต้าร์", "กุ๊ก");
+  put(6, "ภู + กุ๊ก", "ต้าร์");
+  put(7, "ต้าร์ + บี", "ภู");
+  put(8, "จอย + กุ๊ก", "บี");
+  put(9, "ต้าร์ + ภู", "จอย");
+  put(10,"จอย + บี", "ต้าร์");
+  put(11,"ภู + ต้าร์", "กุ๊ก");
+  put(12,"บี + กุ๊ก", "ภู");
+  put(13,"ต้าร์ + ภู", "บี");
+  put(14,"กุ๊ก + บี", "จอย");
+  put(15,"ต้าร์ + จอย", "บี");
+  put(16,"ภู + กุ๊ก", "ต้าร์");
+  put(17,"ต้าร์ + บี", "กุ๊ก");
+  // 18 holiday
+  put(19,"ต้าร์ + จอย", "ภู");
+  put(20,"บี + ภู", "จอย");
+  put(21,"กุ๊ก + ต้าร์", "บี");
+  put(22,"จอย + บี", "กุ๊ก");
+  put(23,"ภู + กุ๊ก", "บี");
+  put(24,"บี + จอย", "ต้าร์");
+  put(25,"ภู + ต้าร์", "จอย");
+  put(26,"จอย + กุ๊ก", "ภู");
+  put(27,"ภู + บี", "กุ๊ก");
+  put(28,"กุ๊ก + จอย", "ต้าร์");
+
+  save();
+  document.getElementById("dwMonth").value = ym;
+  renderDishwashCalendar();
+  alert("เติมข้อมูลเวรล้างจาน ก.พ. 2026 แล้ว");
+}
+
+/* =========================
+   Generate next month shifts
+   Rules:
+   - Morning: 2 people, exactly 1 from {ภู,จอย} + 1 from {ต้าร์,บี,กุ๊ก}
+   - ภู กับ จอย ห้ามอยู่กะเช้าด้วยกัน
+   - Distribution fairness: use previous month counts as weight
+   ========================= */
+function generateNextMonthShifts(ym){
+  if(!ym) return;
+  const {y,m} = monthRange(ym);
+  const nextYM = (m===12)? `${y+1}-01` : `${y}-${String(m+1).padStart(2,"0")}`;
+  const holDays = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  const dates = listDatesInMonth(nextYM).filter(d=>!holDays.includes(d.getDate()));
+
+  // previous month morning counts
+  const prevCounts = {};
+  ["ต้าร์","บี","กุ๊ก","ภู","จอย"].forEach(n=>prevCounts[n]=0);
+  listDatesInMonth(ym).forEach(d=>{
+    if(holDays.includes(d.getDate())) return;
+    const v=(state.shiftCalendar||{})[ymd(d)];
+    if(!v) return;
+    parseNamesList(v.morning).forEach(n=>{ if(prevCounts[n]!=null) prevCounts[n]++; });
+  });
+
+  // targets
+  const workDays = dates.length;
+  // group A (Tar,B,Guk) split ~1/3
+  const targetA = Math.floor(workDays/3);
+  const extraA = workDays - targetA*3;
+  // group B (Phu,Joy) split ~1/2
+  const targetB = Math.floor(workDays/2);
+  const extraB = workDays - targetB*2;
+
+  const A = ["ต้าร์","บี","กุ๊ก"];
+  const B = ["ภู","จอย"];
+
+  // allocate remainder to those with lower prev count
+  const AOrder = A.slice().sort((x,y)=>prevCounts[x]-prevCounts[y]);
+  const BOrder = B.slice().sort((x,y)=>prevCounts[x]-prevCounts[y]);
+
+  const targetCounts = {};
+  A.forEach(n=>targetCounts[n]=targetA);
+  for(let i=0;i<extraA;i++) targetCounts[AOrder[i]]++;
+  B.forEach(n=>targetCounts[n]=targetB);
+  for(let i=0;i<extraB;i++) targetCounts[BOrder[i]]++;
+
+  const cur = {};
+  [...A,...B].forEach(n=>cur[n]=0);
+
+  state.shiftCalendar = state.shiftCalendar || {};
+
+  // build sequences with priority to those under target and also who had higher prev gets later
+  const pickFrom = (group)=>{
+    const cand = group.slice().sort((x,y)=>{
+      const dx = (cur[x]-targetCounts[x]);
+      const dy = (cur[y]-targetCounts[y]);
+      if(dx!==dy) return dx-dy;
+      return prevCounts[x]-prevCounts[y];
+    });
+    return cand[0];
+  };
+
+  dates.forEach((d, idx)=>{
+    const k = ymd(d);
+    const head = pickFrom(B);
+    const other = pickFrom(A);
+    cur[head]++; cur[other]++;
+    const evening = [...A,...B].filter(n=>n!==head && n!==other).join(", ");
+    state.shiftCalendar[k] = {morning: `${other}, ${head}`, evening};
+  });
+
+  save();
+  document.getElementById("shiftMonth").value = nextYM;
+  renderShiftCalendar();
+  alert("คำนวณกะของเดือนถัดไปแล้ว: "+nextYM);
+}
+
+/* =========================
+   Generate next month dishwash (greedy)
+   Rules implemented:
+   - Each working day: main 2 + reserve 1
+   - Main: no same person on consecutive working days (holiday resets)
+   - Main pair: no repeat pair within month; and forbid ภู+จอย
+   - Reserve: not overlap mains
+   - Fairness: main counts as even as possible; if prev month did more => prioritize lower in next month
+   - Also: don't pair main people who are together in morning shift that day; and forbid ภู/จอย pairing
+   ========================= */
+function generateNextMonthDishwash(ym){
+  if(!ym) return;
+  const {y,m} = monthRange(ym);
+  const nextYM = (m===12)? `${y+1}-01` : `${y}-${String(m+1).padStart(2,"0")}`;
+  const holDays = String((state.settings&&state.settings.holidayDays)||"").split(",").map(s=>Number(s.trim())).filter(Boolean);
+  const datesAll = listDatesInMonth(nextYM);
+  const dates = datesAll.filter(d=>!holDays.includes(d.getDate()));
+  const names = ["ต้าร์","บี","กุ๊ก","ภู","จอย"];
+
+  // prev month main counts
+  const prevMain = {};
+  names.forEach(n=>prevMain[n]=0);
+  listDatesInMonth(ym).forEach(d=>{
+    if(holDays.includes(d.getDate())) return;
+    const v=(state.dishwashCalendar||{})[ymd(d)];
+    if(!v) return;
+    parseNamesList(v.main).forEach(n=>{ if(prevMain[n]!=null) prevMain[n]++; });
+  });
+
+  const totalSlots = dates.length*2;
+  const base = Math.floor(totalSlots / names.length);
+  let rem = totalSlots - base*names.length;
+  const target = {};
+  names.forEach(n=>target[n]=base);
+  // give remainder to those who did LESS previously
+  const order = names.slice().sort((a,b)=>prevMain[a]-prevMain[b]);
+  for(let i=0;i<rem;i++) target[order[i]]++;
+
+  const curMain = {}; names.forEach(n=>curMain[n]=0);
+  const curRes = {}; names.forEach(n=>curRes[n]=0);
+
+  const usedPairs = new Set();
+  const keyPair = (a,b)=>[a,b].sort().join("|");
+
+  state.dishwashCalendar = state.dishwashCalendar || {};
+
+  let prevDayMains = new Set(); // reset on holiday automatically because we skip holidays list; but we need reset when there is a holiday between working days
+  // We'll detect gaps >1 day => reset.
+  let prevDateNum = null;
+
+  const scoreName = (n)=> (curMain[n]-target[n]) * 10 + prevMain[n]; // lower is better
+
+  for(const d of dates){
+    const dayNum = d.getDate();
+    if(prevDateNum!=null && (dayNum - prevDateNum) > 1){
+      prevDayMains = new Set(); // reset if a holiday gap
+    }
+    const k = ymd(d);
+
+    const morningSet = empNameSetFromShiftDay(k).morning; // morning shift names set
+
+    // build candidate pairs
+    let bestPair = null;
+    let bestScore = 1e9;
+
+    for(let i=0;i<names.length;i++){
+      for(let j=i+1;j<names.length;j++){
+        const a=names[i], b=names[j];
+        if((a==="ภู" && b==="จอย") || (a==="จอย" && b==="ภู")) continue;
+        if(prevDayMains.has(a) || prevDayMains.has(b)) continue; // no consecutive for each person
+        const pkey = keyPair(a,b);
+        if(usedPairs.has(pkey)) continue; // no repeat pair
+        // can't be together in morning shift
+        if(morningSet.has(a) && morningSet.has(b)) continue;
+
+        const sc = scoreName(a)+scoreName(b);
+        if(sc<bestScore){
+          bestScore=sc;
+          bestPair=[a,b];
+        }
+      }
+    }
+    // fallback if too strict: relax morning constraint first
+    if(!bestPair){
+      for(let i=0;i<names.length;i++){
+        for(let j=i+1;j<names.length;j++){
+          const a=names[i], b=names[j];
+          if((a==="ภู" && b==="จอย") || (a==="จอย" && b==="ภู")) continue;
+          if(prevDayMains.has(a) || prevDayMains.has(b)) continue;
+          const pkey = keyPair(a,b);
+          if(usedPairs.has(pkey)) continue;
+          const sc = scoreName(a)+scoreName(b)+5;
+          if(sc<bestScore){ bestScore=sc; bestPair=[a,b]; }
+        }
+      }
+    }
+    // last resort: allow repeat pair but keep no consecutive & forbid phu+joy
+    if(!bestPair){
+      for(let i=0;i<names.length;i++){
+        for(let j=i+1;j<names.length;j++){
+          const a=names[i], b=names[j];
+          if((a==="ภู" && b==="จอย") || (a==="จอย" && b==="ภู")) continue;
+          if(prevDayMains.has(a) || prevDayMains.has(b)) continue;
+          const sc = scoreName(a)+scoreName(b)+20;
+          if(sc<bestScore){ bestScore=sc; bestPair=[a,b]; }
+        }
+      }
+    }
+
+    const [a,b] = bestPair || ["ต้าร์","บี"];
+    // reserve pick
+    const remaining = names.filter(n=>n!==a && n!==b);
+    remaining.sort((x,y)=>(curRes[x]-curRes[y]) || (prevMain[x]-prevMain[y]));
+    const reserve = remaining[0];
+
+    state.dishwashCalendar[k] = {main: `${a} + ${b}`, reserve};
+
+    curMain[a]++; curMain[b]++; curRes[reserve]++;
+    usedPairs.add(keyPair(a,b));
+    prevDayMains = new Set([a,b]);
+    prevDateNum = dayNum;
+  }
+
+  save();
+  document.getElementById("dwMonth").value = nextYM;
+  renderDishwashCalendar();
+  alert("คำนวณเวรล้างจานของเดือนถัดไปแล้ว: "+nextYM+"\n(ตรวจดู/ปรับแก้ได้ในช่อง)");
+}
+
+function refreshAdminAll(){
+  renderDashboard();
+  renderPayroll();
+  renderEmpAdmin();
+  renderSettingsAdmin();
+  renderShiftCalendar();
+  renderDishwashCalendar();
+}
+
+function backupJSON(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="hr_backup.json";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},0);
+}
+
+function restoreJSON(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const obj = JSON.parse(reader.result);
+      if(!obj || !obj.employees || !obj.punches) throw new Error("รูปแบบไฟล์ไม่ถูกต้อง");
+      state = obj;
+      save();
+      renderEmployees();
+      renderToday();
+      if(adminAuthed) refreshAdminAll();
+      alert("นำเข้าข้อมูลสำเร็จ");
+    }catch(e){
+      alert("นำเข้าไม่สำเร็จ: "+e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+
+  // ===== Admin Panel wiring =====
+  document.querySelectorAll(".adminTab").forEach(btn=>{
+    btn.addEventListener("click", ()=>selectAdminTab(btn.getAttribute("data-tab")));
+  });
+  document.getElementById("btnAdminClose").addEventListener("click", closeAdminPanel);
+
+  document.getElementById("btnDashRefresh").addEventListener("click", renderDashboard);
+  document.getElementById("btnPayRefresh").addEventListener("click", renderPayroll);
+  document.getElementById("btnPayExport").addEventListener("click", exportPayrollCSV);
+  document.getElementById("btnAddAdvance").addEventListener("click", addAdvance);
+  document.getElementById("btnAddEmp").addEventListener("click", addEmployeeAdmin);
+  document.getElementById("btnSaveSettings").addEventListener("click", saveSettingsAdmin);
+  if(document.getElementById("gasUrlInput")){
+    document.getElementById("gasUrlInput").value = gasUrl();
+    document.getElementById("btnSaveGasUrl").addEventListener("click", ()=>{
+      const u = document.getElementById("gasUrlInput").value.trim();
+      if(setGasUrl(u)){
+        alert("บันทึก URL แล้ว — รีเฟรชหน้าเพื่อใช้งาน");
+      }else{
+        alert("URL ไม่ถูกต้อง");
+      }
+    });
+  }
+  document.getElementById("btnShiftRender").addEventListener("click", renderShiftCalendar);
+  document.getElementById("btnDwRender").addEventListener("click", renderDishwashCalendar);
+  document.getElementById("btnShiftSeedFeb2026").addEventListener("click", seedFeb2026Shifts);
+  document.getElementById("btnDwSeedFeb2026").addEventListener("click", seedFeb2026Dishwash);
+  document.getElementById("btnShiftGenNext").addEventListener("click", ()=>generateNextMonthShifts(document.getElementById("shiftMonth").value));
+  document.getElementById("btnDwGenNext").addEventListener("click", ()=>generateNextMonthDishwash(document.getElementById("dwMonth").value));
+
+  document.getElementById("btnBackup").addEventListener("click", backupJSON);
+  document.getElementById("btnRestore").addEventListener("click", ()=>document.getElementById("restoreFile").click());
+  document.getElementById("restoreFile").addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(f) restoreJSON(f);
+    e.target.value = "";
+  });
+
+
+  // ===== Boot: โหลด state กลางจากชีทก่อน =====
+  const ok = await loadStateFromServer();
+  if(!ok){
+    const list = document.getElementById("todayList");
+    list.innerHTML = `
+      <div class="text-slate-700 font-bold">⚠️ เชื่อมต่อ Apps Script ไม่ได้</div>
+      <div class="text-slate-600 mt-1 text-sm">
+        1) ตรวจว่า URL ในตัวแปร <b>GOOGLE_SHEET_WEBAPP_URL</b> เป็นลิงก์ /exec ล่าสุด<br>
+        2) หรือเปิดหน้าเว็บด้วย <b>?gas=YOUR_EXEC_URL</b> เพื่อเซ็ต URL อัตโนมัติ
+      </div>
+    `;
+  }
+
+  // เริ่มโพลประวัติวันนี้ (ทุก 3 วินาที)
+  setInterval(()=>refreshTodayFromServer(), 3000);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) refreshTodayFromServer(); });
+
+
+  renderEmployees();
+  applyLang("TH"); // also renders today
+});
+</script>
+
+  <!-- Admin Panel (Thai only) -->
+  <div id="adminPanel" class="fixed inset-0 hidden bg-slate-50">
+    <div class="h-full flex flex-col">
+      <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-extrabold">HR</div>
+          <div>
+            <div class="font-extrabold text-slate-900 text-lg">หลังบ้าน (แอดมิน)</div>
+            <div class="text-xs text-slate-500">ข้อมูลทั้งหมดถูกซ่อนไว้สำหรับแอดมินเท่านั้น</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnBackup" class="px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold">สำรองข้อมูล (JSON)</button>
+          <button id="btnRestore" class="px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold">นำเข้าข้อมูล</button>
+          <input id="restoreFile" type="file" accept="application/json" class="hidden" />
+          <button id="btnAdminClose" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">ออกจากหลังบ้าน</button>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-hidden flex">
+        <aside class="w-64 bg-white border-r border-slate-200 p-3 overflow-auto">
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 bg-indigo-600 text-white" data-tab="dash">📊 Dashboard</button>
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 hover:bg-slate-50" data-tab="payroll">🧾 เงินเดือน</button>
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 hover:bg-slate-50" data-tab="shifts">🗓️ กะเช้า-เย็น</button>
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 hover:bg-slate-50" data-tab="dishwash">🍽️ เวรล้างจาน</button>
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 hover:bg-slate-50" data-tab="staff">👥 หลังบ้านพนักงาน</button>
+          <button class="adminTab w-full text-left px-3 py-2 rounded-xl font-bold mb-2 hover:bg-slate-50" data-tab="settings">⚙️ ตั้งค่า</button>
+        </aside>
+
+        <main class="flex-1 overflow-auto p-5">
+          <!-- Dashboard -->
+          <section id="tab_dash" class="adminPage">
+            <div class="text-2xl font-extrabold text-slate-900">Dashboard</div>
+            <div class="text-sm text-slate-600 mt-1">สรุปภาพรวมจากข้อมูลตอกบัตร (อัปเดตตามเครื่องนี้)</div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-5">
+              <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="text-xs text-slate-500 font-bold">วันทำงาน (เดือนนี้)</div>
+                <div class="text-3xl font-extrabold mt-1" id="dashWorkDays">0</div>
+              </div>
+              <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="text-xs text-slate-500 font-bold">จำนวนวันทำงานรวม (คน-วัน)</div>
+                <div class="text-3xl font-extrabold mt-1" id="dashManDays">0</div>
+              </div>
+              <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="text-xs text-slate-500 font-bold">ค่าแรงขั้นต้นประมาณการ</div>
+                <div class="text-3xl font-extrabold mt-1" id="dashGross">0</div>
+              </div>
+              <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="text-xs text-slate-500 font-bold">สุทธิหลังหักเบิก</div>
+                <div class="text-3xl font-extrabold mt-1" id="dashNet">0</div>
+              </div>
+            </div>
+
+            <div class="mt-6 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="font-extrabold text-slate-900">สรุปต่อคน (เดือนที่เลือก)</div>
+                  <div class="text-xs text-slate-500">จำนวนวันทำงาน = นับจาก “เข้างาน” ในแต่ละวัน</div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input id="dashMonth" type="month" class="px-3 py-2 rounded-xl border border-slate-200 font-bold" />
+                  <button id="btnDashRefresh" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold">รีเฟรช</button>
+                </div>
+              </div>
+
+              <div class="overflow-auto mt-3">
+                <table class="min-w-[900px] w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-slate-600">
+                      <th class="py-2">พนักงาน</th>
+                      <th>ค่าแรง/วัน</th>
+                      <th>วันทำงาน</th>
+                      <th>ขั้นต้น</th>
+                      <th>ยอดเบิก</th>
+                      <th>สุทธิ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashTable" class="divide-y divide-slate-100"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- Payroll -->
+          <section id="tab_payroll" class="adminPage hidden">
+            <div class="text-2xl font-extrabold text-slate-900">เงินเดือน</div>
+            <div class="text-sm text-slate-600 mt-1">คำนวณจากวันทำงาน (นับจาก “เข้างาน” ต่อวัน)</div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <div class="text-sm font-bold text-slate-700">เดือน:</div>
+                  <input id="payMonth" type="month" class="px-3 py-2 rounded-xl border border-slate-200 font-bold" />
+                  <button id="btnPayRefresh" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold">คำนวณ</button>
+                </div>
+                <button id="btnPayExport" class="px-4 py-2 rounded-xl bg-white border border-slate-200 font-bold">⬇️ Export CSV (Payroll)</button>
+              </div>
+
+              <div class="overflow-auto mt-4">
+                <table class="min-w-[1000px] w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-slate-600">
+                      <th class="py-2">พนักงาน</th>
+                      <th>วันทำงาน</th>
+                      <th>ค่าแรง/วัน</th>
+                      <th>ขั้นต้น</th>
+                      <th>เบิกเงิน (หัก)</th>
+                      <th>สุทธิ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payTable" class="divide-y divide-slate-100"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="font-extrabold text-slate-900">บันทึกการเบิกเงิน</div>
+                  <div class="text-xs text-slate-500">ใช้สำหรับหักจากเงินเดือน</div>
+                </div>
+                <button id="btnAddAdvance" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">+ เพิ่มรายการเบิก</button>
+              </div>
+
+              <div class="overflow-auto mt-3">
+                <table class="min-w-[1000px] w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-slate-600">
+                      <th class="py-2">วันที่</th>
+                      <th>พนักงาน</th>
+                      <th>จำนวนเงิน</th>
+                      <th>หมายเหตุ</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="advTable" class="divide-y divide-slate-100"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- Shifts -->
+          <section id="tab_shifts" class="adminPage hidden">
+            <div class="text-2xl font-extrabold text-slate-900">กะเช้า-เย็น</div>
+            <div class="text-sm text-slate-600 mt-1">แสดงแบบปฏิทิน (แก้ไขได้ด้วยการพิมพ์รายชื่อในช่อง)</div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <div class="text-sm font-bold text-slate-700">เดือน:</div>
+                  <input id="shiftMonth" type="month" class="px-3 py-2 rounded-xl border border-slate-200 font-bold" />
+                  <button id="btnShiftRender" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold">แสดง</button>
+                </div>
+                <div class="text-xs text-slate-500">รูปแบบ: ช่องละ “กะเช้า | กะเย็น” (ใส่ชื่อคั่นด้วย comma)</div>
+              </div>
+
+              <div class="mt-4 overflow-auto" id="shiftCalendarWrap"></div>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <button id="btnShiftSeedFeb2026" class="px-4 py-2 rounded-xl bg-white border border-slate-200 font-bold">เติมข้อมูล (ก.พ. 2026)</button>
+                <button id="btnShiftGenNext" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">คำนวณเดือนถัดไป</button>
+              </div>
+              <div class="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                <div class="font-extrabold text-slate-900">สรุปจำนวนกะ</div>
+                <div class="text-xs text-slate-500">นับจากข้อมูลในตาราง (เดือนที่เลือก)</div>
+                <div class="overflow-auto mt-3">
+                  <table class="min-w-[700px] w-full text-sm">
+                    <thead><tr class="text-left text-slate-600"><th class="py-2">พนักงาน</th><th>กะเช้า</th><th>กะเย็น</th></tr></thead>
+                    <tbody id="shiftSummaryTable" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Dishwash -->
+          <section id="tab_dishwash" class="adminPage hidden">
+            <div class="text-2xl font-extrabold text-slate-900">เวรล้างจาน</div>
+            <div class="text-sm text-slate-600 mt-1">แสดงแบบปฏิทิน: ผู้รับผิดชอบ 2 คน + ตัวสำรอง 1 คน</div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                  <div class="text-sm font-bold text-slate-700">เดือน:</div>
+                  <input id="dwMonth" type="month" class="px-3 py-2 rounded-xl border border-slate-200 font-bold" />
+                  <button id="btnDwRender" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold">แสดง</button>
+                </div>
+                <div class="text-xs text-slate-500">ช่องละ “ตัวจริง: A + B / สำรอง: C”</div>
+              </div>
+
+              <div class="mt-4 overflow-auto" id="dwCalendarWrap"></div>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <button id="btnDwSeedFeb2026" class="px-4 py-2 rounded-xl bg-white border border-slate-200 font-bold">เติมข้อมูล (ก.พ. 2026)</button>
+                <button id="btnDwGenNext" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">คำนวณเดือนถัดไป</button>
+              </div>
+              <div class="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                <div class="font-extrabold text-slate-900">สรุปเวรล้างจาน</div>
+                <div class="text-xs text-slate-500">ตัวจริง = อยู่ใน “ชื่อผู้รับผิดชอบ” | ตัวสำรอง = อยู่ใน “ตัวสำรอง”</div>
+                <div class="overflow-auto mt-3">
+                  <table class="min-w-[800px] w-full text-sm">
+                    <thead><tr class="text-left text-slate-600"><th class="py-2">พนักงาน</th><th>ตัวจริง</th><th>ตัวสำรอง</th></tr></thead>
+                    <tbody id="dwSummaryTable" class="divide-y divide-slate-200"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Staff -->
+          <section id="tab_staff" class="adminPage hidden">
+            <div class="text-2xl font-extrabold text-slate-900">หลังบ้านพนักงาน</div>
+            <div class="text-sm text-slate-600 mt-1">เพิ่ม/ลบ/แก้ไขข้อมูลพนักงาน (ภาษาไทยเท่านั้น)</div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="font-extrabold text-slate-900">รายชื่อพนักงาน</div>
+                <button id="btnAddEmp" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">+ เพิ่มพนักงาน</button>
+              </div>
+
+              <div class="overflow-auto mt-3">
+                <table class="min-w-[900px] w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-slate-600">
+                      <th class="py-2">ชื่อ</th>
+                      <th>PIN</th>
+                      <th>ค่าแรง/วัน</th>
+                      <th>หน้าที่</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="empTable" class="divide-y divide-slate-100"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- Settings -->
+          <section id="tab_settings" class="adminPage hidden">
+            <div class="text-2xl font-extrabold text-slate-900">ตั้งค่า</div>
+            <div class="text-sm text-slate-600 mt-1">ตั้งค่าพื้นฐานสำหรับการคำนวณและปฏิทิน</div>
+
+            <div class="mt-5 bg-white border border-slate-200 rounded-2xl p-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div class="text-xs font-bold text-slate-600 mb-1">วันหยุดร้าน (เลขวันที่ คั่นด้วย ,)</div>
+                  <input id="holidayDays" class="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold" placeholder="เช่น 4,18" />
+                  <div class="text-xs text-slate-500 mt-1">ใช้สำหรับปฏิทิน (แสดงคำว่า “หยุด”)</div>
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-slate-600 mb-1">รหัส Admin (เปลี่ยนได้)</div>
+                  <input id="adminPinSet" class="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold" />
+                  
+
+              <div class="mt-4 bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                <div class="font-extrabold text-slate-900">ลิงก์ Apps Script (/exec)</div>
+                <div class="text-xs text-slate-500 mt-1">กันปัญหา “โค้ดหมดอายุ” เวลา Deploy ใหม่ — วางลิงก์ /exec ล่าสุดที่นี่</div>
+                <div class="flex gap-2 mt-2">
+                  <input id="gasUrlInput" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 font-bold" placeholder="https://script.google.com/macros/s/...../exec">
+                  <button id="btnSaveGasUrl" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold">บันทึก URL</button>
+                </div>
+                <div class="text-xs text-slate-500 mt-2">Tip: หรือเปิดลิงก์ด้วย <b>?gas=URL</b> เพื่อเซ็ตอัตโนมัติ</div>
+              </div>
+<div class="text-xs text-slate-500 mt-1">แนะนำให้เปลี่ยนเป็นรหัสที่เดายาก</div>
+                </div>
+              </div>
+
+              <div class="mt-4">
+                <button id="btnSaveSettings" class="px-5 py-3 rounded-xl bg-indigo-600 text-white font-extrabold">บันทึกการตั้งค่า</button>
+              </div>
+            </div>
+          </section>
+
+        </main>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
